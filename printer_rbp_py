@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+from flask import Flask, request, jsonify
+from datetime import datetime
+import subprocess
+from typing import Iterable, List, Union
+
+# The printer must be a CUPS queue configured as RAW,
+# otherwise ESC/POS bytes will get mangled into text.
+PRINTER_NAME = "TM-T20II"
+
+app = Flask(__name__)
+
+def escpos_bytes(lines: Iterable[Union[str, bytes]], footer_blank: int = 3, cut: bool = True) -> bytes:
+    out = bytearray()
+
+    # Reset printer
+    out += b"\x1B\x40"
+
+    # Header to visually separate receipts
+    out += b"-" * 30 + b"\n"
+    out += b"  Task Completed Receipt\n"
+    out += b"-" * 30 + b"\n"
+
+    for line in lines:
+        if isinstance(line, str):
+            out += line.encode("utf-8", errors="replace") + b"\n"
+        else:
+            out += line + b"\n"
+
+    out += b"\n" * footer_blank
+    if cut:
+        out += b"\x1D\x56\x00"  # full cut
+    return bytes(out)
+
+def print_escpos(data_bytes: bytes) -> None:
+    # We rely on the queue being RAW so bytes are passed untouched
+    subprocess.run(
+        ["lp", "-d", PRINTER_NAME],
+        input=data_bytes,
+        check=True
+    )
+
+@app.post("/print")
+def print_receipt():
+    j = request.get_json(force=True, silent=False)
+
+    title = j.get("title", "(untitled)")
+    listname = j.get("list", "Reminders")
+    completed_at = j.get("completed_at") or datetime.now().isoformat(timespec="seconds")
+    note = j.get("note", "")
+
+    lines: List[str] = [
+        f"Task : {title}",
+        f"List : {listname}",
+        f"Time : {completed_at}",
+    ]
+    if note:
+        lines += ["", "Note:", note]
+
+    try:
+        data = escpos_bytes(lines)
+        print_escpos(data)
+        return jsonify({"ok": True}), 200
+    except subprocess.CalledProcessError as e:
+        return jsonify({"ok": False, "error": f"lp failed: {e}"}), 500
+
+@app.get("/health")
+def health():
+    return jsonify({"ok": True}), 200
+
+if __name__ == "__main__":
+    # Bind to all interfaces so you can reach the Pi from other devices on the LAN
+    app.run(host="0.0.0.0", port=5000)
