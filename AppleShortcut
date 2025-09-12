@@ -1,0 +1,12 @@
+https://www.icloud.com/shortcuts/f22525a238964a91b15a292f62fb88db
+
+-> Shortcut for marking reminders as done and printing them.
+
+Works like this:
+
+1. Get all uncompleted reminders
+2. Choose from all uncompleted reminders
+3. Get title, list, notes from chosen one
+4. Get current date and time
+5. post with json content of title,list,note,date to http://IP:5000/print
+6. Notify that print was done
