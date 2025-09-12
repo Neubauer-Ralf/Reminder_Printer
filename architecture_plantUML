@@ -1,0 +1,17 @@
+@startuml
+actor User as U
+participant "iOS Reminders App" as R
+participant "Shortcuts App" as S
+participant "Flask Webhook (Pi)" as F
+participant "CUPS Raw Queue" as C
+participant "Epson TM-T20II" as P
+
+U -> R : Completes task via Shortcut
+R -> S : Task marked as Completed
+S -> S : Collect task details\n(title, list, notes, date)
+S -> F : POST /print\n(JSON with task details)
+F -> F : Parse JSON\n(format ESC/POS commands)
+F -> C : lp -d TM-T20II\n(send raw bytes)
+C -> P : Deliver ESC/POS commands
+P -> U : Print receipt + cut paper
+@enduml
